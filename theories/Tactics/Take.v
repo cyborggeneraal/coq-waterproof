@@ -28,6 +28,7 @@ Require Import Util.Hypothesis.
 Require Import Util.MessagesToUser.
 
 Require Import Notations.Sets.
+From mathcomp Require Import classical_sets.
 
 Local Ltac2 too_many_of_type_message (t : constr) :=
   concat_list [of_string "Tried to introduce too many variables of type ";
@@ -158,6 +159,25 @@ Local Ltac2 intro_ident (id : ident) (rhs : constr) (tk : TakeKind) :=
     let id_c := Control.hyp id in
     lazy_match! (Control.goal ()) with
     | (?v ∈ ?set_in_cond -> _) =>
+      let possibly_coerced_type :=
+        lazy_match! Constr.type type with
+        | subset _ => type
+        | _ -> Prop => type
+        | _ => get_coerced_type type
+        end in
+      let possibly_coerced_set :=
+        lazy_match! set_in_cond with
+        | conv ?typ => typ
+        | _ => set_in_cond
+        end in
+      if Bool.and (Constr.equal v id_c)
+        (check_constr_equal possibly_coerced_set possibly_coerced_type) then
+        let w := Fresh.fresh (Fresh.Free.of_goal ()) @_H in
+        intro $w (* TODO: could remove when this is trivial... *)
+      else
+        throw (expected_different_condition_message constr:($v ∈ $set_in_cond)
+          constr:($id_c ∈ $rhs))
+    | (is_true (in_set ?v ?set_in_cond) -> _) =>
       let possibly_coerced_type :=
         lazy_match! Constr.type type with
         | subset _ => type
